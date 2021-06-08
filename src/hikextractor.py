@@ -310,7 +310,7 @@ def export_all_videos(source, dest_folder):
         # sort by start datetime and channel
         entrylist = sorted(
             entrylist,
-            key=lambda x: f'{x.start_timestamp}-{x.channel:02d}')
+            key=lambda x: f'{x.start_timestamp:%Y%m%d%H%M}-{x.channel:02d}')
 
         for entry in entrylist:
             if entry.recording:
