@@ -329,6 +329,7 @@ def export_all_videos(source, dest_folder):
                       f"from {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}")
             export_file(mmapped_file[start_offset:end_offset],
                         filename=os.path.join(dest_folder, filename))
+        mmapped_file.close()
 
 
 # Main
