@@ -274,9 +274,11 @@ def export_file(datablock, filename):
 
 
 def export_all_videos(source, dest_folder):
-    with open(source, 'rb') as input_image:
-        mmapped_file = mmap.mmap(input_image.fileno(),
-                                 0, access=mmap.ACCESS_READ)
+    with open(source, 'rb') as input_image, \
+            mmap.mmap(input_image.fileno(),
+                      0,
+                      access=mmap.ACCESS_READ) \
+            as mmapped_file:
         try:
             master = parse_master_block(mmapped_file)
             print(f"HD Signature: {master.signature.decode('utf-8')}")
@@ -306,8 +308,9 @@ def export_all_videos(source, dest_folder):
             print(f"Channel {ch:02d}: {channels[ch]} video blocks")
 
         # sort by start datetime and channel
-        entrylist = sorted(entrylist,
-                           key=lambda x: f'{x.start_timestamp}-{x.channel:02d}')
+        entrylist = sorted(
+            entrylist,
+            key=lambda x: f'{x.start_timestamp}-{x.channel:02d}')
 
         for entry in entrylist:
             if entry.recording:
@@ -329,7 +332,6 @@ def export_all_videos(source, dest_folder):
                       f"from {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}")
             export_file(mmapped_file[start_offset:end_offset],
                         filename=os.path.join(dest_folder, filename))
-        mmapped_file.close()
 
 
 # Main
