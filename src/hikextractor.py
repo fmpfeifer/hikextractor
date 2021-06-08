@@ -326,7 +326,7 @@ def export_all_videos(source, dest_folder):
                       f"block being recorded.")
             else:
                 print(f"Exporting footage for channel {entry.channel:02d}, "
-                      f"from {start:%Y-%m-%d-%H-%M} to {end:%Y-%m-%d-%H-%M}")
+                      f"from {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}")
             export_file(mmapped_file[start_offset:end_offset],
                         filename=os.path.join(dest_folder, filename))
 
