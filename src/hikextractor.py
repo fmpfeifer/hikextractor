@@ -347,6 +347,6 @@ if __name__ == "__main__":
         print(f"File not found: {source}", file=sys.stderr)
         exit(1)
     if not os.path.isdir(dest_folder):
-        print(f"{dest_folder} is not a directory")
+        print(f"{dest_folder} is not a directory", file=sys.stderr)
         exit(1)
     export_all_videos(source, dest_folder)
