@@ -12,6 +12,8 @@ It uses ffmpeg to mux the video into MP4 files, so ffmpeg should be in the os se
 
 The script was tested using python 3.9, but any version from 3.7 on should work.
 
+The HD Image can be created using dd (from linux), any forensic imager (FTK Imager, for instance). You can also use the HDD Raw Copy Tool from HDDGURU [HDD Raw Copy Tool](https://hddguru.com/software/HDD-Raw-Copy-Tool/).
+
 ## Usage
 
 In the folder containing the file "hikextractor.py" and "ffmpeg.exe":
