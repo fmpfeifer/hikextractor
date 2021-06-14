@@ -314,7 +314,7 @@ def export_all_videos(source, dest_folder):
 
         for entry in entrylist:
             if entry.recording:
-                filename = f'CH-{entry.channel:02d}-RECORDING.mp4'
+                filename = f'CH-{entry.channel:02d}__RECORDING.mp4'
             else:
                 start = entry.start_timestamp
                 end = entry.end_timestamp
