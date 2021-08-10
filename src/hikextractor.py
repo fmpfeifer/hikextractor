@@ -303,7 +303,7 @@ def export_file(datablock, filename):
         ffmpeg.communicate()
 
 
-def export_all_videos(source, dest_folder):
+def export_all_videos(source, dest_folder, list_only=False):
     with open(source, "rb") as input_image, mmap.mmap(
         input_image.fileno(), 0, access=mmap.ACCESS_READ
     ) as mmapped_file:
@@ -313,6 +313,7 @@ def export_all_videos(source, dest_folder):
             print(f"Filesystem version: {str(master.version.decode('utf-8'))}")
             print(f"HD Capacity: {master.capacity} bytes")
             print(f"Data block size: {master.size_data_block} bytes")
+            print(f"Time System Init: {master.time_system_init:%Y-%m-%d-%H-%M}")
             print()
             if master.version != b"HIK.2011.03.08":
                 print(
@@ -354,18 +355,24 @@ def export_all_videos(source, dest_folder):
                 filename = f"CH-{entry.channel:02d}__{start:%Y-%m-%d-%H-%M}__{end:%Y-%m-%d-%H-%M}.mp4"
             start_offset = entry.offset_datablock
             end_offset = start_offset + master.size_data_block
-            print()
-            if entry.recording:
-                print(f"Exporting footage for channel {entry.channel:02d}, block being recorded.")
+            if list_only:
+                if entry.recording:
+                    print(f"Channel {entry.channel:02d}, block being recorded.")
+                else:
+                    print(f"Channel {entry.channel:02d}, from {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}")
             else:
-                print(
-                    f"Exporting footage for channel {entry.channel:02d}, "
-                    f"from {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}"
+                print()
+                if entry.recording:
+                    print(f"Exporting footage for channel {entry.channel:02d}, block being recorded.")
+                else:
+                    print(
+                        f"Exporting footage for channel {entry.channel:02d}, "
+                        f"from {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}"
+                    )
+                export_file(
+                    mmapped_file[start_offset:end_offset],
+                    filename=os.path.join(dest_folder, filename),
                 )
-            export_file(
-                mmapped_file[start_offset:end_offset],
-                filename=os.path.join(dest_folder, filename),
-            )
 
 
 # Main
@@ -379,7 +386,16 @@ if __name__ == "__main__":
         required=True,
         help="Raw image file from the DVR HD",
     )
-    parser.add_argument("-o", "--output", dest="output", required=True, help="Output directory")
+    parser.add_argument("-o", "--output", dest="output", required=False, default=None, help="Output directory")
+    parser.add_argument(
+        "-l",
+        "--list",
+        dest="list",
+        required=False,
+        default=False,
+        action="store_true",
+        help="List footage that can be exported",
+    )
     args = parser.parse_args()
 
     source = args.input
@@ -387,7 +403,15 @@ if __name__ == "__main__":
     if not os.path.isfile(source):
         print(f"File not found: {source}", file=sys.stderr)
         exit(1)
-    if not os.path.isdir(dest_folder):
-        print(f"{dest_folder} is not a directory", file=sys.stderr)
-        exit(1)
-    export_all_videos(source, dest_folder)
+    if args.list:
+        export_all_videos(source, None, True)
+    else:
+
+        if dest_folder is None:
+            print(f"Destination folder not specified", file=sys.stderr)
+            exit(1)
+        elif not os.path.isdir(dest_folder):
+            print(f"{dest_folder} is not a directory", file=sys.stderr)
+            exit(1)
+        else:
+            export_all_videos(source, dest_folder)
