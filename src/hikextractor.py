@@ -123,7 +123,7 @@ def parse_master_block(mappedfile) -> MasterBlock:
     size_hibtree1 = to_uint32(master, 0xA0)
     offset_hibtree2 = to_uint64(master, 0xA8)
     size_hibtree2 = to_uint32(master, 0xB0)
-    time_system_init = to_datetime(master, 0x140)
+    time_system_init = to_datetime(master, 0xF0)
     return MasterBlock(
         signature=signature,
         capacity=capacity,
