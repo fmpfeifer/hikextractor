@@ -351,12 +351,12 @@ def export_all_videos(source, dest_folder):
             else:
                 start = entry.start_timestamp
                 end = entry.end_timestamp
-                filename = f"CH-{entry.channel:02d}__" f"{start:%Y-%m-%d-%H-%M}__" f"{end:%Y-%m-%d-%H-%M}.mp4"
+                filename = f"CH-{entry.channel:02d}__{start:%Y-%m-%d-%H-%M}__{end:%Y-%m-%d-%H-%M}.mp4"
             start_offset = entry.offset_datablock
             end_offset = start_offset + master.size_data_block
             print()
             if entry.recording:
-                print(f"Exporting footage for channel {entry.channel:02d}, " f"block being recorded.")
+                print(f"Exporting footage for channel {entry.channel:02d}, block being recorded.")
             else:
                 print(
                     f"Exporting footage for channel {entry.channel:02d}, "
