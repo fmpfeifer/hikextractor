@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# do not track ffmpeg
+ffmpeg.exe
+
+# do not store vscode settings
+.vscode/
+
 # C extensions
 *.so
 
