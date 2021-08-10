@@ -422,7 +422,7 @@ if __name__ == "__main__":
     else:
 
         if dest_folder is None:
-            print(f"Destination folder not specified", file=sys.stderr)
+            print("Destination folder not specified", file=sys.stderr)
             exit(1)
         elif not os.path.isdir(dest_folder):
             print(f"{dest_folder} is not a directory", file=sys.stderr)
