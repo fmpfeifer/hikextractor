@@ -338,7 +338,12 @@ def export_all_videos(source, dest_folder):
             print(f"Channel {ch:02d}: {channels[ch]} video blocks")
 
         # sort by start datetime and channel
-        entrylist = sorted(entrylist, key=lambda x: f"{x.start_timestamp:%Y%m%d%H%M}-{x.channel:02d}")
+        def sortkey(x):
+            if x.recording:
+                return f"00REC-{x.channel:02d}"
+            return f"{x.start_timestamp:%Y%m%d%H%M}-{x.channel:02d}"
+
+        entrylist = sorted(entrylist, key=sortkey)
 
         for entry in entrylist:
             if entry.recording:
