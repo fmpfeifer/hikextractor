@@ -303,7 +303,7 @@ def export_file(datablock, filename):
         ffmpeg.communicate()
 
 
-def export_all_videos(source, dest_folder, list_only=False):
+def export_all_videos(source, dest_folder, list_only=False, master_only=False):
     with open(source, "rb") as input_image, mmap.mmap(
         input_image.fileno(), 0, access=mmap.ACCESS_READ
     ) as mmapped_file:
@@ -313,7 +313,7 @@ def export_all_videos(source, dest_folder, list_only=False):
             print(f"Filesystem version: {str(master.version.decode('utf-8'))}")
             print(f"HD Capacity: {master.capacity} bytes")
             print(f"Data block size: {master.size_data_block} bytes")
-            print(f"Time System Init: {master.time_system_init:%Y-%m-%d-%H-%M}")
+            print(f"Time System Init: {master.time_system_init:%Y-%m-%d %H:%M}")
             print()
             if master.version != b"HIK.2011.03.08":
                 print(
@@ -327,6 +327,9 @@ def export_all_videos(source, dest_folder, list_only=False):
         except Exception as e:
             print(e, file=sys.stderr)
             exit(1)
+
+        if master_only:
+            return
 
         channels = dict()
         for entry in entrylist:
@@ -396,6 +399,15 @@ if __name__ == "__main__":
         action="store_true",
         help="List footage that can be exported",
     )
+    parser.add_argument(
+        "-m",
+        "--master-only",
+        dest="master_only",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Parse only the master block",
+    )
     args = parser.parse_args()
 
     source = args.input
@@ -403,8 +415,10 @@ if __name__ == "__main__":
     if not os.path.isfile(source):
         print(f"File not found: {source}", file=sys.stderr)
         exit(1)
-    if args.list:
-        export_all_videos(source, None, True)
+    if args.master_only:
+        export_all_videos(source, None, list_only=False, master_only=True)
+    elif args.list:
+        export_all_videos(source, None, list_only=True, master_only=False)
     else:
 
         if dest_folder is None:
