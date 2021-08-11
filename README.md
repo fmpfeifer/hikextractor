@@ -16,9 +16,25 @@ The HD Image can be created using dd (from linux), any forensic imager (FTK Imag
 
 ## Usage
 
+### Decode master block
+
+In the folder containing the file "hikextractor.py":
+```sh
+python hikextractor.py -i <INPUT_IMAGE.DD> -m
+```
+
+### List available footage
+
+In the folder containing the file "hikextractor.py":
+```sh
+python hikextractor.py -i <INPUT_IMAGE.DD> -l
+```
+
+### Extract all footage
+
 In the folder containing the file "hikextractor.py" and "ffmpeg.exe":
 
-```
+```sh
 python hikextractor.py -i <INPUT_IMAGE.DD> -o <OUTPUT_DIR>
 ```
 
