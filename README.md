@@ -7,7 +7,7 @@ This script was written based on the following paper: [Paper](https://eudl.eu/pd
 
 The format found in the HD was not the same as the described in the paper, but the overall structure was the same (maybe a different version).
 
-It was tested only in windows, using and DD image of the HD as input.
+It was tested only in windows, using a DD image of the HD as input.
 It uses FFmpeg to mux the video into MP4 files, so FFmpeg should be in the os search path (ffmpeg.exe in the same folder as the script is enough). You can get a copy of FFmpeg here: [FFmpeg](https://ffmpeg.org/download.html).
 
 The script was tested using python 3.9, but any version from 3.7 on should work.
