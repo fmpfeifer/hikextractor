@@ -141,7 +141,7 @@ def parse_master_block(mappedfile) -> MasterBlock:
     )
 
 
-def parse_hbt_entry(data, offset) -> HIKBTREEEntry:
+def parse_hbt_entry(data, offset) -> Optional[HIKBTREEEntry]:
     has_footage = to_uint64(data, offset + 0x8) == 0
     channel = to_uint8(data, offset + 0x11)
     dt1 = to_uint32(data, offset + 0x18)
@@ -155,6 +155,8 @@ def parse_hbt_entry(data, offset) -> HIKBTREEEntry:
         else:
             start_timestamp = to_datetime(data, offset + 0x18)
             end_timestamp = to_datetime(data, offset + 0x1C)
+    else:
+        return None
     return HIKBTREEEntry(
         channel=channel,
         has_footage=has_footage,
@@ -184,7 +186,9 @@ def parse_hbtree(data, masterblock: MasterBlock) -> List[HIKBTREEEntry]:
         next_page = to_uint64(data, offset_page + 0x20)
         first_entry = offset_page + 0x60
         for i in range(entry_count):
-            entries.append(parse_hbt_entry(data, first_entry + i * 48))
+            entry = parse_hbt_entry(data, first_entry + i * 48)
+            if entry is not None:
+                entries.append(entry)
         if next_page == 0xFFFFFFFFFFFFFFFF:
             break
         offset_page = next_page
@@ -304,9 +308,7 @@ def export_file(datablock, filename):
 
 
 def export_all_videos(source, dest_folder, list_only=False, master_only=False):
-    with open(source, "rb") as input_image, mmap.mmap(
-        input_image.fileno(), 0, access=mmap.ACCESS_READ
-    ) as mmapped_file:
+    with open(source, "rb") as input_image, mmap.mmap(input_image.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
         try:
             master = parse_master_block(mmapped_file)
             print(f"HD Signature: {master.signature.decode('utf-8')}")
