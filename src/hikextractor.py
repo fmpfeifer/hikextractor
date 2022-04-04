@@ -288,6 +288,8 @@ def export_file(datablock, filename):
     with subprocess.Popen(
         [
             "ffmpeg",
+            "-err_detect",
+            "ignore_err",
             "-i",
             "-",
             "-c:v",
