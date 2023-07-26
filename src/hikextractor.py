@@ -309,6 +309,15 @@ def export_file(datablock, filename):
         ffmpeg.communicate()
 
 
+def rename_file_if_exists(filename: str) -> str:
+    count = 1
+    new_filename = filename
+    while os.path.exists(new_filename):
+        new_filename = filename[:filename.rfind(".")] + f"_{count}" + filename[filename.rfind("."):]
+        count += 1
+    return new_filename
+
+
 def export_all_videos(source, dest_folder, list_only=False, master_only=False):
     with open(source, "rb") as input_image, mmap.mmap(input_image.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
         try:
@@ -378,12 +387,11 @@ def export_all_videos(source, dest_folder, list_only=False, master_only=False):
                     )
                 export_file(
                     mmapped_file[start_offset:end_offset],
-                    filename=os.path.join(dest_folder, filename),
+                    filename=rename_file_if_exists(os.path.join(dest_folder, filename)),
                 )
 
 
 # Main
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
