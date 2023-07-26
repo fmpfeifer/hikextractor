@@ -278,35 +278,42 @@ def export_footage_from_block(datablock, outfile):
         end_offset = find_in_bytes(datablock, BA_NAL, start_offset + 5, 120 * 1024)
         if end_offset < 0:
             return
-        outfile.write(datablock[start_offset:end_offset])
+        try:
+            outfile.write(datablock[start_offset:end_offset])
+        except:
+            return
         start_offset = find_in_bytes(datablock, BA_NAL, end_offset, 512)
         if start_offset < 0:
             return
 
 
-def export_file(datablock, filename):
-    with subprocess.Popen(
-        [
-            "ffmpeg",
-            "-err_detect",
-            "ignore_err",
-            "-i",
-            "-",
-            "-c:v",
-            "copy",
-            "-bsf:v",
-            "filter_units=pass_types=1-5",
-            "-aspect",
-            "4/3",
-            "-loglevel",
-            "error",
-            "-stats",
-            filename,
-        ],
-        stdin=subprocess.PIPE,
-    ) as ffmpeg:
-        export_footage_from_block(datablock, ffmpeg.stdin)
-        ffmpeg.communicate()
+def export_file(datablock, filename, raw=False):
+    if not raw:
+        with subprocess.Popen(
+            [
+                "ffmpeg",
+                "-err_detect",
+                "ignore_err",
+                "-i",
+                "-",
+                "-c:v",
+                "copy",
+                "-bsf:v",
+                "filter_units=pass_types=1-5",
+                "-aspect",
+                "4/3",
+                "-loglevel",
+                "error",
+                "-stats",
+                filename,
+            ],
+            stdin=subprocess.PIPE,
+        ) as ffmpeg:
+            export_footage_from_block(datablock, ffmpeg.stdin)
+            ffmpeg.communicate()
+    else:
+        with open(filename,'wb') as out:
+            export_footage_from_block(datablock, out)
 
 
 def rename_file_if_exists(filename: str) -> str:
@@ -318,7 +325,7 @@ def rename_file_if_exists(filename: str) -> str:
     return new_filename
 
 
-def export_all_videos(source, dest_folder, list_only=False, master_only=False):
+def export_all_videos(source, dest_folder, list_only=False, master_only=False, raw=False):
     with open(source, "rb") as input_image, mmap.mmap(input_image.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
         try:
             master = parse_master_block(mmapped_file)
@@ -362,13 +369,15 @@ def export_all_videos(source, dest_folder, list_only=False, master_only=False):
 
         entrylist = sorted(entrylist, key=sortkey)
 
+        ext = "h264" if raw else "mp4"
+
         for entry in entrylist:
             if entry.recording:
-                filename = f"CH-{entry.channel:02d}__RECORDING.mp4"
+                filename = f"CH-{entry.channel:02d}__RECORDING.{ext}"
             else:
                 start = entry.start_timestamp
                 end = entry.end_timestamp
-                filename = f"CH-{entry.channel:02d}__{start:%Y-%m-%d-%H-%M}__{end:%Y-%m-%d-%H-%M}.mp4"
+                filename = f"CH-{entry.channel:02d}__{start:%Y-%m-%d-%H-%M}__{end:%Y-%m-%d-%H-%M}.{ext}"
             start_offset = entry.offset_datablock
             end_offset = start_offset + master.size_data_block
             if list_only:
@@ -388,6 +397,7 @@ def export_all_videos(source, dest_folder, list_only=False, master_only=False):
                 export_file(
                     mmapped_file[start_offset:end_offset],
                     filename=rename_file_if_exists(os.path.join(dest_folder, filename)),
+                    raw=raw
                 )
 
 
@@ -420,6 +430,15 @@ if __name__ == "__main__":
         action="store_true",
         help="Parse only the master block",
     )
+    parser.add_argument(
+        "-r",
+        "--raw-h264",
+        dest="raw",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Export footage as raw h264 stream (do not remux into mp4)"
+    )
     args = parser.parse_args()
 
     source = args.input
@@ -440,4 +459,4 @@ if __name__ == "__main__":
             print(f"{dest_folder} is not a directory", file=sys.stderr)
             exit(1)
         else:
-            export_all_videos(source, dest_folder)
+            export_all_videos(source, dest_folder, raw=args.raw)
