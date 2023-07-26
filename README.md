@@ -19,6 +19,7 @@ The HD Image can be created using dd (from linux), any forensic imager (FTK Imag
 ### Decode master block
 
 In the folder containing the file "hikextractor.py":
+
 ```sh
 python hikextractor.py -i <INPUT_IMAGE.DD> -m
 ```
@@ -26,6 +27,7 @@ python hikextractor.py -i <INPUT_IMAGE.DD> -m
 ### List available footage
 
 In the folder containing the file "hikextractor.py":
+
 ```sh
 python hikextractor.py -i <INPUT_IMAGE.DD> -l
 ```
@@ -36,6 +38,19 @@ In the folder containing the file "hikextractor.py" and "ffmpeg.exe":
 
 ```sh
 python hikextractor.py -i <INPUT_IMAGE.DD> -o <OUTPUT_DIR>
+```
+
+- INPUT_IMAGE.DD - HD raw image
+- OUTPUT_DIR - Output folder where the mp4 videos will be saved to
+
+### Extract all footage to raw h264 Stream
+
+If ffmpeg cannot mux the h264 stream to a mp4 file, you can export the raw h264 stream.
+It can be played using the VLC Media Player.
+In the folder containing the file "hikextractor.py" and "ffmpeg.exe":
+
+```sh
+python hikextractor.py -i <INPUT_IMAGE.DD> -o <OUTPUT_DIR> -r
 ```
 
 - INPUT_IMAGE.DD - HD raw image
