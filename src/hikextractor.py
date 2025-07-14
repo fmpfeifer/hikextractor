@@ -172,10 +172,7 @@ def parse_hbtree(data, masterblock: MasterBlock) -> List[HIKBTREEEntry]:
     signature = bytes(data[offset + 0x10 : offset + 0x18])
     if signature != HIKBTREE_SIGNATURE:
         raise Exception("Wrong HIKBTREE Signature")
-    offset_page_list = to_uint64(data, offset + 0x50)
-
-    # parse page list:
-    offset_page = to_uint64(data, offset_page_list + 0x18)
+    offset_page = to_uint64(data, offset + 0x58)
 
     entries = []
     safe_count = 0
