@@ -172,10 +172,7 @@ def parse_hbtree(data, masterblock: MasterBlock) -> List[HIKBTREEEntry]:
     signature = bytes(data[offset + 0x10 : offset + 0x18])
     if signature != HIKBTREE_SIGNATURE:
         raise Exception("Wrong HIKBTREE Signature")
-    offset_page_list = to_uint64(data, offset + 0x50)
-
-    # parse page list:
-    offset_page = to_uint64(data, offset_page_list + 0x18)
+    offset_page = to_uint64(data, offset + 0x58)
 
     entries = []
     safe_count = 0
@@ -325,8 +322,14 @@ def rename_file_if_exists(filename: str) -> str:
     return new_filename
 
 
+def get_file_size(fp):
+    return fp.seek(0, os.SEEK_END)
+
+
 def export_all_videos(source, dest_folder, list_only=False, master_only=False, raw=False):
-    with open(source, "rb") as input_image, mmap.mmap(input_image.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
+    with open(source, "rb") as input_image, mmap.mmap(
+        input_image.fileno(), get_file_size(input_image), access=mmap.ACCESS_READ
+    ) as mmapped_file:
         try:
             master = parse_master_block(mmapped_file)
             print(f"HD Signature: {master.signature.decode('utf-8')}")
@@ -443,7 +446,7 @@ if __name__ == "__main__":
 
     source = args.input
     dest_folder = args.output
-    if not os.path.isfile(source):
+    if not os.path.exists(source):
         print(f"File not found: {source}", file=sys.stderr)
         exit(1)
     if args.master_only:
