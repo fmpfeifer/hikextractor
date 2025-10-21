@@ -1,4 +1,4 @@
-# hikextractor
+# hikextractor-gui
 
 Script to parse HIKVISION DVR hard drives and export the footage
 
