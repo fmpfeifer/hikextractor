@@ -65,6 +65,8 @@ python hikextractor.py -i <INPUT_IMAGE.DD> -o <OUTPUT_DIR>
 If FFmpeg cannot mux the H264 stream to an MP4 file, you can export the raw H264 stream instead.
 It can be played using the VLC Media Player.
 
+```winget install --id=Gyan.FFmpeg  -e```
+
 In the folder containing the file **`hikextractor.py`** and **`ffmpeg.exe`**:
 
 ```sh
