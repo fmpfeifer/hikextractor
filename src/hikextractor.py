@@ -1,18 +1,11 @@
-import mmap
-import struct
-import subprocess
-import sys
-import os.path
-import argparse
-import dataclasses
-from datetime import datetime
+import os, subprocess, tempfile, shutil, mmap, struct, sys, argparse, dataclasses
+from datetime import datetime, timezone
 from typing import List, Optional
 
 SIGNATURE = b"HIKVISION@HANGZHOU"
 IDR_ENTRY_SIGNATURE = b"OFNI"
 HIKBTREE_SIGNATURE = b"HIKBTREE"
 BA_NAL = bytes.fromhex("00 00 01 BA")
-
 
 # Data model
 @dataclasses.dataclass(frozen=True)
@@ -87,7 +80,7 @@ def to_uint64(buff: bytes, offset: int) -> int:
 
 
 def to_datetime(buff: bytes, offset: int) -> datetime:
-    return datetime.utcfromtimestamp(to_uint32(buff, offset))
+    return datetime.fromtimestamp(to_uint32(buff, offset), tz=timezone.utc)
 
 
 def check_all_zeros(buff: bytes) -> bool:
@@ -197,14 +190,11 @@ def parse_hbtree(data, masterblock: MasterBlock) -> List[HIKBTREEEntry]:
 
 
 # IDR Parsing still not functional
-
-
 def parse_idr_entry(datablock, offset):
     signature = bytes(datablock[offset : offset + 4])
     if signature != IDR_ENTRY_SIGNATURE:
         raise Exception("Wrong IDR Entry Signature")
 
-    # entry_size = to_uint8(datablock, offset + 4)
     offset_next_entry = to_uint32(datablock, offset + 0x14)
     timestamp = to_datetime(datablock, offset + 0x18)
     num1 = to_uint32(datablock, offset + 0xC)
@@ -283,50 +273,273 @@ def export_footage_from_block(datablock, outfile):
         if start_offset < 0:
             return
 
+def _write_temp(data, suffix):
+    fd, path = tempfile.mkstemp(suffix=suffix, dir=tempfile.gettempdir())
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    return path
 
-def export_file(datablock, filename, raw=False):
-    if not raw:
-        with subprocess.Popen(
-            [
-                "ffmpeg",
-                "-err_detect",
-                "ignore_err",
-                "-i",
-                "-",
-                "-c:v",
-                "copy",
-                "-bsf:v",
-                "filter_units=pass_types=1-5",
-                "-aspect",
-                "4/3",
-                "-loglevel",
-                "error",
-                "-stats",
-                filename,
-            ],
-            stdin=subprocess.PIPE,
-        ) as ffmpeg:
-            export_footage_from_block(datablock, ffmpeg.stdin)
-            ffmpeg.communicate()
+def _find_first_ps_pack(b):
+    # look for MPEG-PS pack start code 00 00 01 BA within first ~2 MiB
+    window = b[:2*1024*1024]
+    sig = b"\x00\x00\x01\xBA"
+    i = window.find(sig)
+    return i if i >= 0 else -1
+
+def _find_first_annexb_idr(b):
+    # conservative: need SPS (67), PPS (68) before first IDR (65)
+    start3 = b"\x00\x00\x01"
+    start4 = b"\x00\x00\x00\x01"
+    # scan first ~2 MiB
+    window = b[:2*1024*1024]
+    # find SPS/PPS
+    have_sps = have_pps = False
+    pos = 0
+    while True:
+        j = window.find(start3, pos)
+        k = window.find(start4, pos)
+        if j < 0 and k < 0:
+            break
+        p = j if (j >= 0 and (k < 0 or j < k)) else k
+        sc_len = 3 if p == j else 4
+        nalu_start = p + sc_len
+        if nalu_start >= len(window): break
+        nal_type = window[nalu_start] & 0x1F
+        if nal_type == 7: have_sps = True
+        elif nal_type == 8: have_pps = True
+        elif nal_type == 5 and have_sps and have_pps:
+            return p  # position of startcode before IDR
+        pos = nalu_start + 1
+    return -1
+
+def _run(cmd):
+    # helper to run ffmpeg/ffprobe
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return p.returncode, p.stdout.decode("utf-8", "ignore"), p.stderr.decode("utf-8", "ignore")
+
+def export_file(mm_slice, filename, raw=False):
+    """
+    mm_slice: bytes-like (memoryview) for the block
+    filename: destination .mp4 or .h264 per current CLI
+    raw: when True, write elementary H.264 instead of MP4
+    """
+    data = bytes(mm_slice)
+
+    # quick zero/empty check
+    if not data or data.count(0) == len(data):
+        print("  [!] block empty/zeros; skipping")
+        return
+
+    # detect container and align to a clean start
+    ps_off = _find_first_ps_pack(data)
+    if ps_off >= 0:
+        cut = data[ps_off:]
+        kind = "ps"
     else:
-        with open(filename,'wb') as out:
-            export_footage_from_block(datablock, out)
+        idr_off = _find_first_annexb_idr(data)
+        if idr_off < 0:
+            # last resort: try entire buffer as h264 anyway
+            cut = data
+        else:
+            cut = data[idr_off:]
+        kind = "h264"
 
+    # temp input
+    in_path = _write_temp(cut, ".bin")
+
+    try:
+        if raw:
+            # Produce raw H.264 (elementary) robustly
+            if kind == "ps":
+                # demux to raw h264 elementary via TS hop
+                ts_path = in_path + ".ts"
+                h264_path = filename  # user asked for .h264
+                cmd1 = [
+                    "ffmpeg", "-y",
+                    "-analyzeduration", "200M", "-probesize", "200M",
+                    "-fflags", "+discardcorrupt",
+                    "-err_detect", "ignore_err",
+                    "-i", in_path,
+                    "-map", "0:v:0",
+                    "-c:v", "copy",
+                    "-f", "mpegts", ts_path
+                ]
+                rc, _, _ = _run(cmd1)
+                if rc != 0:
+                    print("  [ffmpeg] PS→TS failed, re-encoding to raw h264…")
+                    # attempt re-encode directly to elementary
+                    cmd1b = [
+                        "ffmpeg", "-y",
+                        "-analyzeduration", "200M", "-probesize", "200M",
+                        "-fflags", "+genpts",
+                        "-i", in_path,
+                        "-map", "0:v:0",
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                        h264_path
+                    ]
+                    _run(cmd1b)
+                else:
+                    # extract elementary from TS
+                    cmd2 = [
+                        "ffmpeg", "-y",
+                        "-analyzeduration", "200M", "-probesize", "200M",
+                        "-fflags", "+genpts",
+                        "-i", ts_path,
+                        "-map", "0:v:0",
+                        "-c:v", "copy",
+                        "-f", "h264", h264_path
+                    ]
+                    rc2, _, _ = _run(cmd2)
+                    if rc2 != 0:
+                        print("  [ffmpeg] TS→H264 failed, re-encoding…")
+                        cmd3 = [
+                            "ffmpeg", "-y",
+                            "-analyzeduration", "200M", "-probesize", "200M",
+                            "-fflags", "+genpts",
+                            "-i", ts_path,
+                            "-map", "0:v:0",
+                            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                            h264_path
+                        ]
+                        _run(cmd3)
+                if os.path.exists(ts_path): os.remove(ts_path)
+            else:
+                # cut is Annex-B already → make sure it starts at IDR, then write
+                with open(filename, "wb") as out:
+                    out.write(cut)
+            return
+
+        # MP4 path (default): prefer a resilient two-stage remux
+        if kind == "ps":
+            ts_path = in_path + ".ts"
+            # PS -> TS (tolerant)
+            cmd1 = [
+                "ffmpeg", "-y",
+                "-analyzeduration", "200M", "-probesize", "200M",
+                "-fflags", "+discardcorrupt",
+                "-err_detect", "ignore_err",
+                "-i", in_path,
+                "-map", "0:v:0",
+                "-c:v", "copy",
+                "-f", "mpegts", ts_path
+            ]
+            rc1, _, _ = _run(cmd1)
+            if rc1 != 0:
+                print("  [ffmpeg] PS→TS failed, re-encoding whole chunk…")
+                # fall back: PS -> MP4 re-encode
+                cmd1b = [
+                    "ffmpeg", "-y",
+                    "-analyzeduration", "200M", "-probesize", "200M",
+                    "-fflags", "+genpts",
+                    "-i", in_path,
+                    "-map", "0:v:0",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-movflags", "+faststart",
+                    filename
+                ]
+                _run(cmd1b)
+            else:
+                # TS -> MP4 (copy)
+                cmd2 = [
+                    "ffmpeg", "-y",
+                    "-analyzeduration", "200M", "-probesize", "200M",
+                    "-i", ts_path,
+                    "-map", "0:v:0",
+                    "-c:v", "copy",
+                    "-movflags", "+faststart",
+                    filename
+                ]
+                rc2, _, _ = _run(cmd2)
+                if rc2 != 0:
+                    print("  [ffmpeg] TS→MP4 copy failed, re-encoding…")
+                    cmd3 = [
+                        "ffmpeg", "-y",
+                        "-analyzeduration", "200M", "-probesize", "200M",
+                        "-fflags", "+genpts",
+                        "-i", ts_path,
+                        "-map", "0:v:0",
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                        "-movflags", "+faststart",
+                        filename
+                    ]
+                    _run(cmd3)
+            if os.path.exists(ts_path): os.remove(ts_path)
+
+        else:
+            # Annex-B H.264 → TS → MP4
+            ts_path = in_path + ".ts"
+            cmd1 = [
+                "ffmpeg", "-y",
+                "-r", "25",
+                "-fflags", "+genpts",
+                "-analyzeduration", "200M", "-probesize", "200M",
+                "-f", "h264", "-i", in_path,
+                "-c:v", "copy",
+                "-bsf:v", "h264_metadata=aud=insert",
+                "-f", "mpegts", ts_path
+            ]
+            rc1, _, _ = _run(cmd1)
+            if rc1 != 0:
+                print("  [ffmpeg] H264→TS failed, re-encoding…")
+                cmd1b = [
+                    "ffmpeg", "-y",
+                    "-r", "25",
+                    "-fflags", "+genpts",
+                    "-analyzeduration", "200M", "-probesize", "200M",
+                    "-f", "h264", "-i", in_path,
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-movflags", "+faststart",
+                    filename
+                ]
+                _run(cmd1b)
+            else:
+                cmd2 = [
+                    "ffmpeg", "-y",
+                    "-analyzeduration", "200M", "-probesize", "200M",
+                    "-i", ts_path,
+                    "-c:v", "copy",
+                    "-movflags", "+faststart",
+                    filename
+                ]
+                rc2, _, _ = _run(cmd2)
+                if rc2 != 0:
+                    print("  [ffmpeg] TS→MP4 copy failed, re-encoding…")
+                    cmd3 = [
+                        "ffmpeg", "-y",
+                        "-analyzeduration", "200M", "-probesize", "200M",
+                        "-i", ts_path,
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                        "-movflags", "+faststart",
+                        filename
+                    ]
+                    _run(cmd3)
+            if os.path.exists(ts_path): os.remove(ts_path)
+
+    finally:
+        if os.path.exists(in_path): os.remove(in_path)
 
 def rename_file_if_exists(filename: str) -> str:
-    count = 1
-    new_filename = filename
-    while os.path.exists(new_filename):
-        new_filename = filename[:filename.rfind(".")] + f"_{count}" + filename[filename.rfind("."):]
-        count += 1
-    return new_filename
+    root, ext = os.path.splitext(filename)
+    i, new = 1, filename
+    while os.path.exists(new):
+        new = f"{root}_{i}{ext}"
+        i += 1
+    return new
 
 
 def get_file_size(fp):
     return fp.seek(0, os.SEEK_END)
 
 
-def export_all_videos(source, dest_folder, list_only=False, master_only=False, raw=False):
+def export_all_videos(
+    source,
+    dest_folder,
+    list_only=False,
+    master_only=False,
+    raw=False,
+    channel: Optional[int] = None,
+    physical: bool = False,
+):
     with open(source, "rb") as input_image, mmap.mmap(
         input_image.fileno(), get_file_size(input_image), access=mmap.ACCESS_READ
     ) as mmapped_file:
@@ -354,33 +567,52 @@ def export_all_videos(source, dest_folder, list_only=False, master_only=False, r
         if master_only:
             return
 
-        channels = dict()
+        channels = {}
         for entry in entrylist:
-            if entry.channel not in channels.keys():
-                channels[entry.channel] = 0
-            channels[entry.channel] += 1
+            channels[entry.channel] = channels.get(entry.channel, 0) + 1
+
 
         sorted_channels = sorted(list(channels.keys()))
         for ch in sorted_channels:
             print(f"Channel {ch:02d}: {channels[ch]} video blocks")
 
-        # sort by start datetime and channel
-        def sortkey(x):
-            if x.recording:
-                return f"00REC-{x.channel:02d}"
-            return f"{x.start_timestamp:%Y%m%d%H%M}-{x.channel:02d}"
+        # Filter by channel if requested
+        if channel is not None:
+            entrylist = [e for e in entrylist if e.channel == channel]
 
-        entrylist = sorted(entrylist, key=sortkey)
+        # Choose ordering
+        if physical:
+            # Newest first by physical location on disk (higher offsets assumed newer)
+            entrylist = sorted(entrylist, key=lambda e: e.offset_datablock, reverse=True)
+        else:
+            # Original time-based order (may be wrong if RTC failed)
+            def sortkey(x):
+                if x.recording:
+                    return f"00REC-{x.channel:02d}"
+                return f"{x.start_timestamp:%Y%m%d%H%M}-{x.channel:02d}"
+            entrylist = sorted(entrylist, key=sortkey)
 
         ext = "h264" if raw else "mp4"
 
+        # Sequential index for filenames when timestamps are not trustworthy
+        seq = 0
+
         for entry in entrylist:
             if entry.recording:
-                filename = f"CH-{entry.channel:02d}__RECORDING.{ext}"
+                # Recording block: avoid time in name if physical mode
+                if physical:
+                    seq += 1
+                    filename = f"CH-{entry.channel:02d}__seq{seq:06d}__RECORDING.{ext}"
+                else:
+                    filename = f"CH-{entry.channel:02d}__RECORDING.{ext}"
             else:
                 start = entry.start_timestamp
                 end = entry.end_timestamp
-                filename = f"CH-{entry.channel:02d}__{start:%Y-%m-%d-%H-%M}__{end:%Y-%m-%d-%H-%M}.{ext}"
+                if physical:
+                    seq += 1
+                    filename = f"CH-{entry.channel:02d}__seq{seq:06d}.{ext}"
+                else:
+                    filename = f"CH-{entry.channel:02d}__{start:%Y-%m-%d-%H-%M}__{end:%Y-%m-%d-%H-%M}.{ext}"
             start_offset = entry.offset_datablock
             end_offset = start_offset + master.size_data_block
             if list_only:
@@ -393,19 +625,26 @@ def export_all_videos(source, dest_folder, list_only=False, master_only=False, r
                 if entry.recording:
                     print(f"Exporting footage for channel {entry.channel:02d}, block being recorded.")
                 else:
-                    print(
-                        f"Exporting footage for channel {entry.channel:02d}, "
-                        f"from {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}"
-                    )
+                    if physical:
+                        print(f"Exporting (physical order) Channel {entry.channel:02d} → {filename}")
+                    else:
+                        print(
+                            f"Exporting footage for channel {entry.channel:02d}, "
+                            f"from {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M}"
+                        )
                 export_file(
                     mmapped_file[start_offset:end_offset],
                     filename=rename_file_if_exists(os.path.join(dest_folder, filename)),
                     raw=raw
                 )
 
-
 # Main
 if __name__ == "__main__":
+    import shutil
+    if shutil.which("ffmpeg") is None:
+        print("ffmpeg not found in PATH; please install it first.", file=sys.stderr)
+        sys.exit(2)
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-i",
@@ -442,6 +681,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Export footage as raw h264 stream (do not remux into mp4)"
     )
+    parser.add_argument(
+        "-c", "--channel", dest="channel", type=int, default=None,
+        help="Only export this channel (e.g. 6)"
+    )
+    parser.add_argument(
+        "--physical-order", dest="physical", action="store_true", default=False,
+        help="Ignore timestamps; walk blocks by physical offset (newest first)"
+    )
     args = parser.parse_args()
 
     source = args.input
@@ -462,4 +709,8 @@ if __name__ == "__main__":
             print(f"{dest_folder} is not a directory", file=sys.stderr)
             exit(1)
         else:
-            export_all_videos(source, dest_folder, raw=args.raw)
+            export_all_videos(
+                source, dest_folder,
+                list_only=False, master_only=False, raw=args.raw,
+                channel=args.channel, physical=args.physical
+            )
