@@ -7,14 +7,22 @@ This script was written based on the following paper: [Paper](https://eudl.eu/pd
 
 The format found in the HD was not the same as the described in the paper, but the overall structure was the same (maybe a different version).
 
-It was tested only in windows, using a DD image of the HD as input.
-It uses FFmpeg to mux the video into MP4 files, so FFmpeg should be in the os search path (ffmpeg.exe in the same folder as the script is enough). You can get a copy of FFmpeg here: [FFmpeg](https://ffmpeg.org/download.html).
+The script has also been successfully tested on the HDD from a DS-7208HQHI-SH/A DVR model, that had the real-time clock fail due to age and was recording with semi-random timestamps due to multiple power failures. For this use case the `--physical-order` option was added, to retrieve video data in the order it was stored on the HD (with the hope that the recording just reuses the same storage area over and over, while leaving timestamps run out of order).
 
-The script was tested using python 3.9, but any version from 3.7 on should work.
+It was tested on windows and linux, using a DD image of the HD as input.
+It uses FFmpeg to mux the video into MP4 files, so FFmpeg should be in the os search path (ffmpeg.exe in the same folder as the script is enough). You can get a copy of FFmpeg here: [FFmpeg](https://ffmpeg.org/download.html). For linux, you can use your package manager to install it.
 
-The HD Image can be created using dd (from linux), any forensic imager (FTK Imager, for instance). You can also use the HDD Raw Copy Tool from HDDGURU: [HDD Raw Copy Tool](https://hddguru.com/software/HDD-Raw-Copy-Tool/).
+The script was tested using python 3.9 and python 3.13, but any version from 3.7 on should work.
 
-## Usage
+The HD Image can be created using dd (from linux), any forensic imager (FTK Imager, for instance). You can also use the HDD Raw Copy Tool from HDDGURU: [HDD Raw Copy Tool](https://hddguru.com/software/HDD-Raw-Copy-Tool/). Direct usage on an actual HDD is not recommended, even if it has been successfully tested.
+
+## Usage examples
+
+Use
+```sh
+python hikextractor.py -h
+```
+to view available options and a short description for each.
 
 ### Decode master block
 
@@ -55,3 +63,15 @@ python hikextractor.py -i <INPUT_IMAGE.DD> -o <OUTPUT_DIR> -r
 
 - INPUT_IMAGE.DD - HD raw image
 - OUTPUT_DIR - Output folder where the mp4 videos will be saved to
+
+### Extract all footage in physical order
+
+```sh
+python hikextractor.py -i <INPUT_IMAGE.DD> -o <OUTPUT_DIR> --physical-order
+```
+
+### Extract all footage for just one channel
+
+```sh
+python hikextractor.py -i <INPUT_IMAGE.DD> -o <OUTPUT_DIR> -c <CHANNEL_NUMBER>
+```

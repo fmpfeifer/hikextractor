@@ -1,13 +1,6 @@
-import mmap
-import struct
-import subprocess
-import sys
-import os.path
-import argparse
-import dataclasses
+import os, subprocess, tempfile, shutil, mmap, struct, sys, argparse, dataclasses
 from datetime import datetime, timezone
 from typing import List, Optional
-import os, subprocess, tempfile, shutil
 
 SIGNATURE = b"HIKVISION@HANGZHOU"
 IDR_ENTRY_SIGNATURE = b"OFNI"
@@ -527,12 +520,12 @@ def export_file(mm_slice, filename, raw=False):
         if os.path.exists(in_path): os.remove(in_path)
 
 def rename_file_if_exists(filename: str) -> str:
-    count = 1
-    new_filename = filename
-    while os.path.exists(new_filename):
-        new_filename = filename[:filename.rfind(".")] + f"_{count}" + filename[filename.rfind("."):]
-        count += 1
-    return new_filename
+    root, ext = os.path.splitext(filename)
+    i, new = 1, filename
+    while os.path.exists(new):
+        new = f"{root}_{i}{ext}"
+        i += 1
+    return new
 
 
 def get_file_size(fp):
@@ -648,6 +641,11 @@ def export_all_videos(
 
 # Main
 if __name__ == "__main__":
+    import shutil
+    if shutil.which("ffmpeg") is None:
+        print("ffmpeg not found in PATH; please install it first.", file=sys.stderr)
+        sys.exit(2)
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-i",
