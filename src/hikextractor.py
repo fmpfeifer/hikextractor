@@ -6,7 +6,6 @@ SIGNATURE = b"HIKVISION@HANGZHOU"
 IDR_ENTRY_SIGNATURE = b"OFNI"
 HIKBTREE_SIGNATURE = b"HIKBTREE"
 BA_NAL = bytes.fromhex("00 00 01 BA")
-TMP_DIR = "/tmp"
 
 # Data model
 @dataclasses.dataclass(frozen=True)
@@ -275,7 +274,7 @@ def export_footage_from_block(datablock, outfile):
             return
 
 def _write_temp(data, suffix):
-    fd, path = tempfile.mkstemp(suffix=suffix, dir=TMP_DIR)
+    fd, path = tempfile.mkstemp(suffix=suffix, dir=tempfile.gettempdir())
     with os.fdopen(fd, "wb") as f:
         f.write(data)
     return path
