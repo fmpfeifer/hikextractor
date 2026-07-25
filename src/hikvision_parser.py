@@ -6,7 +6,7 @@ import os.path
 import argparse
 import dataclasses
 from datetime import datetime
-from typing import List, Optional, Tuple, Any
+from typing import List, Optional, Tuple
 
 # --- Constants from Original Script ---
 SIGNATURE = b"HIKVISION@HANGZHOU"
@@ -238,7 +238,7 @@ class HikvisionParser:
         self.source_path = source_path
         self.master_block: Optional[MasterBlock] = None
         self.entry_list: List[HIKBTREEEntry] = []
-        
+
     def parse_metadata(self) -> Tuple[MasterBlock, List[HIKBTREEEntry]]:
         """Parses the MasterBlock and HIKBTREE from the disk image."""
         if not os.path.exists(self.source_path):

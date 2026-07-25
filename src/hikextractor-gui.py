@@ -1,6 +1,7 @@
 import sys
 import os
 import traceback
+from typing import List, Optional
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
