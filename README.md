@@ -55,6 +55,22 @@ python hikextractor-gui.py
   - A window will open, allowing you to select the **HD raw image** and the **output folder**.
   - **FFmpeg** must still be accessible for the extraction process to work.
 
+### Preview footage without extracting (GUI)
+
+The viewer plays footage straight from the HD image, so you can check what is on it before exporting anything.
+
+In the folder containing the file **`hikextractor-viewer.py`**:
+
+```sh
+python hikextractor-viewer.py <INPUT_IMAGE.DD>
+```
+
+  - Leave out the path to choose the image in a file dialog.
+  - Select a channel, then a block. Playback carries on into the next block when one ends.
+  - Drag the slider to jump through the block. The time shown is estimated from the position in the block; the camera's on-screen clock is exact.
+  - Choose a speed from 1x to 8x, or **Fast scan**, which shows keyframes only.
+  - Needs PyQt6 and **FFmpeg 5.1 or later**.
+
 ### Extract all footage (CLI)
 
 In the folder containing the file **`hikextractor.py`** and **`ffmpeg.exe`**:
